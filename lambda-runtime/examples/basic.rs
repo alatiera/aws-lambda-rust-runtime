@@ -6,6 +6,9 @@ use log::LevelFilter;
 use serde::{Deserialize, Serialize};
 use simple_logger::SimpleLogger;
 
+use gstreamer as gst;
+use gst::GstObjectExt;
+
 /// This is also a made-up example. Requests come into the runtime as unicode
 /// strings in json format, which can map to any structure that implements `serde::Deserialize`
 /// The runtime pays no attention to the contents of the request payload.
@@ -22,10 +25,13 @@ struct Request {
 struct Response {
     req_id: String,
     msg: String,
+    plugins: Vec<String>,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
+    gst::init()?;
+
     // required to enable CloudWatch error logging by the runtime
     // can be replaced with any other method of initializing `log`
     SimpleLogger::new().with_level(LevelFilter::Info).init().unwrap();
@@ -38,11 +44,19 @@ async fn main() -> Result<(), Error> {
 pub(crate) async fn my_handler(event: Request, ctx: Context) -> Result<Response, Error> {
     // extract some useful info from the request
     let command = event.command;
+    let registry = gst::Registry::get();
+    let _plugins = registry.get_plugin_list();
+
+    let mut plugins = Vec::new();
+    for p in _plugins {
+        plugins.push(p.get_name().to_string())
+    }
 
     // prepare the response
     let resp = Response {
         req_id: ctx.request_id,
         msg: format!("Command {} executed.", command),
+        plugins: plugins,
     };
 
     // return `Response` (it will be serialized to JSON automatically by the runtime)
